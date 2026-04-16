@@ -45,14 +45,14 @@ The script takes a file containing a long list of commit hashes and applies them
 To create the hash file:
 
 ```
-git log --reverse --pretty=format:"%H" > commits.txt
+❯ git log --reverse --pretty=format:"%H" > commits.txt
 ```
 
 I ran the script, was happy at first, and then thought *that can't be right* when I saw the result I'd forgotten to add `.git` to `.ignore`. So I cheated a little by copying the current `.gitignore` into `.ignore`:
 
 ```
-cat .gitignore > .ignore
-echo '.git' >> .ignore
+❯ cat .gitignore > .ignore
+❯ echo '.git' >> .ignore
 ```
 
 Running `./commit.sh commits.txt`, the script chewed through commits one at a time. It's still running, and the `.pijul` folder is already up to 11k files and 1.9 GiB. The `.git` folder, by comparison, is 946 MiB with **28 files**. Not 28k. Twenty-eight.
@@ -66,6 +66,69 @@ Running `./commit.sh commits.txt`, the script chewed through commits one at a ti
 
 I cancelled at commit `848327760f4d351e41f75385709c7748cfff9164` from Aug 13, 2019. Ironically, that's where "Brian Vaughn" committed *"Initializing empty merge repo"* which cleared out all the files.
 
+*edit*
+
+I realize i did not event look at my original point(and AI pointed it out), waisted space on disk.
+
+```
+# Size on disk
+❯ du -s --block-size=1 .pijul/
+2120962048      .pijul/
+# Size it should be.
+❯ du --apparent-size -s --block-size=1 .pijul/
+2093044109      .pijul/
+```
+
+So the difference lost to the small file size is not as extreme as i expected, 2 120 962 048 vs 2 093 044 109 bytes.
+A difference of about 27 917 939 bytes, or 26-ish MiB.
+
+The major difference is probably that the patches are compressed sepperatly rather than together, loosing some of the benefits of zstd compression... A dumb test i could do is to compress change folder `.pijul/changes` with zstd --train and see if that improves the situation.
+
+### Pijul gc tangent
+ 
+´´´
+zstd --train ./.pijul/changes/* -o changes
+Error 12 : not enough memory for DiB_trainFiles
+´´´
+Hmm, the buffer is not enough i guess.
+
+After some rubber ducking with an AI, decompressing everything and recomrpressing would be a better more fair test.
+
+So 2 scripts later [extract.sh](https://github.com/Skabunkel/public-notes/blob/main/pijul/extract.sh) and [compress.sh](https://github.com/Skabunkel/public-notes/blob/main/pijul/compress.sh) and we have implemented a basic `pijul gc` feature... by not using pijul.
+
+An important note, i had to reduce this to only 2000 commits and not all 11356 i want to finish this today.
+
+```
+#  Size on disk.
+❯ du --apparent-size -s --block-size=1 /tmp/c_nodict /tmp/c_dict
+279209941       /tmp/c_nodict
+283599998       /tmp/c_dict
+#  Size on disk with block waste.
+❯ du  -s --block-size=1 /tmp/c_nodict /tmp/c_dict
+284188672       /tmp/c_nodict
+288964608       /tmp/c_dict
+```
+
+block waste here is less important, but this is 2000 diffs and they are 271MiB at their smallest. Im starting to think zstd is not the right tool for the job here? as a last ditch effort i tld zstd to compress all files and concatenate them, together 
+```
+❯ zstd -19 -r /tmp/pchanges -o pchanges.zst
+```
+zstd tell us that we will lose filenames and directory structure but this is just a way to guage a path forward, if we do this in code i think we can recover them somehow.
+
+```
+#  Size on disk.
+❯ du --apparent-size -s --block-size=1 pchanges.zst
+279209941       pchanges.zst
+#  Size on disk with block waste.
+❯ du -s --block-size=1 pchanges.zst
+279212032       pchanges.zst
+```
+About 266MiB, and how would this compare to a git repository.... No clue... This became its own tangent.
+
+But just running zstd compression on the files is way better than one by one it seems, and we have 2000 frames now, so we can address each file and recreate the directory structure by frame index.
+
+However, if we assume that all patches are about the same size and compression is going to remain the same we still get 1,4 GiB in the end.
+
 ## Where I'd go from here
 
 I really *want* to like pijul. It has good ideas. But one file per diff doesn't scale.
@@ -76,6 +139,12 @@ A few ideas:
 
 - One archive per file. That'd be more than git's impressive 28 files for a repo that has way more than 28 files, but still way fewer than 11k.
 - zstd has support for training optimized dictionaries before compressing data (try `zstd --train`) maybe that helps too.
+
+- Better testing setup.
+    Create a repo from react with some commits.
+
+- Try zstd --patch-form (THIS WILL TAKE FOREVER). i might write a program for this.
+
 
 // N.Au
 
