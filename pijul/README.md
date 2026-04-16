@@ -1,82 +1,82 @@
-I really like the idea of a source versioning tool called pijul.
+# Notes on pijul
 
-It has a few good features like managing conflicts better, and only tracking patches.
+I really like the *idea* of a source versioning tool called pijul.
 
-This sounds really good in theory, and i like the idea so i have spent a few years on and off using it, recently i decided to learn alot more about it, and even understand how it works.
+It has a few good features better conflict handling, and patch-based tracking instead of snapshots. That sounds great in theory, and I liked the idea enough that I've spent a few years on and off using it. Recently I decided to learn a lot more about it, and even understand how it works.
 
-Im not an expert but i understand enoug to say a few things about it.
+I'm not an expert, but I understand enough to say a few things about it.
 
-When i initaly looked at pijul i thought WOW this will be smaller and better than git, and everyone will use it. Git will probably add the feature to git and then that will be all.
+When I initially looked at pijul I thought *wow, this will be smaller and better than git, and everyone will use it. Git will probably copy the feature, and that will be that.*
 
-Now several years later that has not happened, and learning more about it i now feel like i know why?
+Now, several years later, that hasn't happened and after digging into it, I think I know why.
 
-reading about pijul and reading the source code i find that the diffs are stored in a file, named with the diff hash in a folder called `changes` in this folder the first 2 letters of a hash will be used to name a folder, and then the changes are small files in each folder.
+## How pijul stores changes
 
-To me this is a little bit of a worrying sign, each patch is a file... so there will be alot of small files, each file will probably eat one block on a disk meaning that a 500 byte file will eat atleast 512,1024 or 4096 bytes. 
+Reading about pijul and reading the source code, I found that diffs are stored one-per-file, named by the diff hash, in a folder called `changes`. Inside that folder, the first 2 letters of a hash name a sub-folder, and the changes are small files in each sub-folder.
 
-Im on an ssd so in my case its 4096, this means that each file is if i have 30 changes to 1 file this will create 30 small patch files each of them with eating atleast 4096 bytes of physical disk space. 
+To me this is a worrying sign. Each patch is its own file, so there will be a lot of small files and each file eats one block on disk. A 500-byte file will consume at least 512, 1024, or 4096 bytes depending on the filesystem.
 
+I'm on an SSD, so in my case it's 4096. That means if I have 30 changes to one file, I'll have 30 small patch files, each consuming at least 4096 bytes of physical disk space.
 
-doing som bistro math we can say this.
+## Some bistro math
 
-lets say the file was 8192 in size thats 2 blocks of 4096 bytes consumed by 1 file, and we have 30 changes to this file. 
+Let's say a file is 8192 bytes that's 2 blocks of 4096 bytes consumed by 1 file and we have 30 changes to it. Let's say it started at 2048 bytes and grew to 8192 bytes over those edits. That's a large text file; there are bigger, but it's a lot of text.
 
-lets say it started at 2048 bytes and over the course of these edits it grew to 8192 bytes, this is a large text file, there are bigger but this is alot of text.
+If each change is about 205 bytes (or 205 characters), 30 of them would be 6150 bytes of actual content. Pijul also uses [zstd seekable](https://github.com/facebook/zstd/blob/dev/contrib/seekable_format/zstd_seekable_compression_format.md) compression, which adds seek frames and a little overhead minuscule compared to the per-file block waste.
 
-if each change is about 205 bytes or 205 characters, we will have 30 files 205 byte each, but that is not quite true. pijul uses zstd to compress them, infact it uses [zstd seekable](https://github.com/facebook/zstd/blob/dev/contrib/seekable_format/zstd_seekable_compression_format.md) meaning that it will have seek frames etc inside adding a little extra space, this space is miniscule compared to the space each individual file will consume on the hardrive.
+So the *content* is around 6 KiB. But each file claims a full 4 KiB block on disk, making the on-disk footprint **122,880 bytes (~120 KiB)** vs. ~6 KiB of actual data.
 
-if each file was 205 bytes, 30 of them would consume 6150 bytes. But each file will consume a 4k block on the disk making the final size 122 880 bytes or 120MiB vs 6MiB of the accutal changes.
+## Speculation isn't enough let's test
 
+But this is just speculation, right? I needed to test it.
 
-But this is just speculation right? I know nothing, so i needed to test it.
+My initial idea was to use my own repo with many commits [Skabunkel/banned-ip-addresses](https://github.com/Skabunkel/banned-ip-addresses) but that's an extreme case. It was a cron job on my VPS recording IP addresses banned by fail2ban over several months: 1- or 2-line changes at most. I needed something more representative.
 
-My initial idea was to use my own repo with many commits [Skabunkel/banned-ip-addresses](https://github.com/Skabunkel/banned-ip-addresses) but that is an extream case of what real changes would look like, it was a cronjob running on my VPS recording the IP addresses banned by fail2ban for several months. it is 1 or 2 line changes at most.
+First I considered the Linux source code, but that felt too big for a first test. NixOS/nixpkgs was also too big. So I asked an AI for a suggestion that would have a lot of small files being changed, and it suggested [facebook/react](https://github.com/facebook/react).
 
-I need something better.
+That looked perfect: only 21k commits, lots of tiny files, and at 946 MiB (~1 GB) it's a chunky repo.
 
-First i wanted to try the linux source code, but that would be a little too big to do a first test with, then i looked at NixOS/nixpkgs but that is also a bit too big. So i asked AI for a suggestion that would be alot of small files being changed.
+## Migrating the data
 
-it suggested [facebook/react](https://github.com/facebook/react) 
+Then came the question of how to migrate. There's a `--git` flag you can pass to pijul, but it has failed for me before and I wanted the result to behave as if the project had started using pijul from day one. So I wrote a dumb script: [commit.sh](https://github.com/Skabunkel/public-notes/blob/main/pijul/commit.sh).
 
-And that looks perfect, only 21k commits and alot of tiny files. Pluss its 946MiB or about 1GB in size so it was a big chunky repo.
+The script takes a file containing a long list of commit hashes and applies them one after the other, recording the state in pijul.
 
-Then came how should i migrate the data, well there is a `--git` flag that you can add to pijul but that has failed before and i wanted it to behave like they had started using pijul, so i wrote a dumb script to migrate it. this script is in [commit.sh](https://github.com/Skabunkel/public-notes/pijul/commit.sh).
+To create the hash file:
 
-This script will take a file that is a long list of commits and apply thiem one after the other and record the state in pijul.
-
-To create the hash file i used this command.
 ```
 git log --reverse --pretty=format:"%H" > commits.txt
 ```
-Initially i ran the script and was happy, but when i saw the result `i thought that cant be right` and realized i forgot to add `.git` to `.ignore` so i decided i would cheat a little by copying the current version of the .gitignore file into the .ignore file aswell.
+
+I ran the script, was happy at first, and then thought *that can't be right* when I saw the result I'd forgotten to add `.git` to `.ignore`. So I cheated a little by copying the current `.gitignore` into `.ignore`:
 
 ```
 cat .gitignore > .ignore
 echo '.git' >> .ignore
 ```
-running the script via `./commit.sh commits.txt` it will go through each line and... well its still running and the `.pijul` folder is almost up to 11k files and 1,9GiB the .git folder is 946MiB with only 28 files not 28k files 28.
 
-Stats bellow
+Running `./commit.sh commits.txt`, the script chewed through commits one at a time. It's still running, and the `.pijul` folder is already up to 11k files and 1.9 GiB. The `.git` folder, by comparison, is 946 MiB with **28 files**. Not 28k. Twenty-eight.
 
-| folder | files  | folders | size      | Size bytes    |
+## Results
+
+| folder | files  | folders | size      | size (bytes)  |
 |--------|--------|---------|-----------|---------------|
 | .git   | 28     | 15      | 946.2 MiB | 992 162 854   |
 | .pijul | 11 361 | 1 027   | 2.0 GiB   | 2 094 365 715 |
 
-I cancelled at commit 848327760f4d351e41f75385709c7748cfff9164 from Aug 13, 2019
+I cancelled at commit `848327760f4d351e41f75385709c7748cfff9164` from Aug 13, 2019. Ironically, that's where "Brian Vaughn" committed *"Initializing empty merge repo"* which cleared out all the files.
 
-Ironically when A "Brian Vaughn" committed "Initializing empty merge repo" that cleared out all files.
+## Where I'd go from here
 
+I really *want* to like pijul. It has good ideas. But one file per diff doesn't scale.
 
-I really want to like pijul i has a few good ideas, but one file per diff does not scale. 
-Ill see if i can spend some time cleaning up the code and add my own storage back end. 
+I'll see if I can spend some time poking at the code and adding my own storage backend. Right now I'm struggling to understand `sanakirja`, the database pijul uses for channels (branches).
 
-Im currently struggling with understanding `sanakirja` which is the database pijul uses for channels(branches).
+A few ideas:
 
-I have a few ideas. 
-1 would be have an archive per file, it would be more than gits impressive 28 files for a repo that has way more than 28 files.
+- One archive per file. That'd be more than git's impressive 28 files for a repo that has way more than 28 files, but still way fewer than 11k.
+- zstd has support for training optimized dictionaries before compressing data (try `zstd --train`) maybe that helps too.
 
-There is also the fact that zstd has support for creating optemized dictionaries before compressing data (google `zstd --train`) and maybe i can use that.
+// N.Au
 
-// N.Au 
-Ps. I should have gone to bed about 1 hour ago <_< why do i do this to myself.
+Ps. I should have gone to bed about an hour ago `<_<` why do I do this to myself.
