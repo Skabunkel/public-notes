@@ -86,10 +86,10 @@ The major difference is probably that the patches are compressed sepperatly rath
 
 ### Pijul gc tangent
  
-´´´
+```
 zstd --train ./.pijul/changes/* -o changes
 Error 12 : not enough memory for DiB_trainFiles
-´´´
+```
 Hmm, the buffer is not enough i guess.
 
 After some rubber ducking with an AI, decompressing everything and recomrpressing would be a better more fair test.
