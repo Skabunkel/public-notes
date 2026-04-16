@@ -68,7 +68,7 @@ I cancelled at commit `848327760f4d351e41f75385709c7748cfff9164` from Aug 13, 20
 
 *edit*
 
-I realize i did not event look at my original point(and AI pointed it out), waisted space on disk.
+I realize I did not even look at my original point(and AI pointed it out), wasted space on disk.
 
 ```
 # Size on disk
@@ -79,10 +79,10 @@ I realize i did not event look at my original point(and AI pointed it out), wais
 2093044109      .pijul/
 ```
 
-So the difference lost to the small file size is not as extreme as i expected, 2 120 962 048 vs 2 093 044 109 bytes.
+So the difference lost to the small file size is not as extreme as I expected, 2 120 962 048 vs 2 093 044 109 bytes.
 A difference of about 27 917 939 bytes, or 26-ish MiB.
 
-The major difference is probably that the patches are compressed sepperatly rather than together, loosing some of the benefits of zstd compression... A dumb test i could do is to compress change folder `.pijul/changes` with zstd --train and see if that improves the situation.
+The major difference is probably that the patches are compressed separately rather than together, losing some of the benefits of zstd compression... A dumb test i could do is to compress change folder `.pijul/changes` with zstd --train and see if that improves the situation.
 
 ### Pijul gc tangent
  
@@ -90,13 +90,13 @@ The major difference is probably that the patches are compressed sepperatly rath
 zstd --train ./.pijul/changes/* -o changes
 Error 12 : not enough memory for DiB_trainFiles
 ```
-Hmm, the buffer is not enough i guess.
+Hmm, the buffer is not enough I guess.
 
 After some rubber ducking with an AI, decompressing everything and recompressing would be a better more fair test.
 
 So 2 scripts later [extract.sh](https://github.com/Skabunkel/public-notes/blob/main/pijul/extract.sh) and [compress.sh](https://github.com/Skabunkel/public-notes/blob/main/pijul/compress.sh) and we have implemented a basic `pijul gc` feature... by not using pijul.
 
-An important note, i had to reduce this to only 2000 commits and not all 11356 i want to finish this today.
+An important note, I had to reduce this to only 2000 commits and not all 11356 I want to finish this today.
 
 ```
 #  Size on disk.
@@ -109,7 +109,7 @@ An important note, i had to reduce this to only 2000 commits and not all 11356 i
 288964608       /tmp/c_dict
 ```
 
-block waste here is less important, but this is 2000 diffs and they are 271MiB at their smallest. Im starting to think zstd is not the right tool for the job here? as a last ditch effort i tld zstd to compress all files and concatenate them, together 
+block waste here is less important, but this is 2000 diffs and they are 271MiB at their smallest. I'm starting to think zstd is not the right tool for the job here? as a last ditch effort I told zstd to compress all files and concatenate them, together 
 ```
 ❯ zstd -19 -r /tmp/pchanges -o pchanges.zst
 ```
@@ -143,9 +143,23 @@ A few ideas:
 - Better testing setup.
     Create a repo from react with some commits.
 
-- Try zstd --patch-form (THIS WILL TAKE FOREVER). i might write a program for this.
+- Try zstd --patch-from (THIS WILL TAKE FOREVER). I might write a program for this.
 
+```
+# Usage
+zstd --patch-from=old_file new_file -o patch.zst
+# To apply the patch and reconstruct the new version
+zstd -d --patch-from=old_file patch.zst -o recovered_new_file
+```
 
 // N.Au
 
 Ps. I should have gone to bed about an hour ago `<_<` why do I do this to myself.
+
+
+# Things to do.
+
+Rewrite this as a proper article focusing on the size difference bettwen pijul and git, explain why then try and make up that difference.
+
+AI recommendation
+- read `Documentation/technical/pack-heuristics.txt` ?
