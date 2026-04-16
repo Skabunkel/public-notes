@@ -92,7 +92,7 @@ Error 12 : not enough memory for DiB_trainFiles
 ```
 Hmm, the buffer is not enough i guess.
 
-After some rubber ducking with an AI, decompressing everything and recomrpressing would be a better more fair test.
+After some rubber ducking with an AI, decompressing everything and recompressing would be a better more fair test.
 
 So 2 scripts later [extract.sh](https://github.com/Skabunkel/public-notes/blob/main/pijul/extract.sh) and [compress.sh](https://github.com/Skabunkel/public-notes/blob/main/pijul/compress.sh) and we have implemented a basic `pijul gc` feature... by not using pijul.
 
