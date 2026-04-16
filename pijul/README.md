@@ -113,7 +113,7 @@ block waste here is less important, but this is 2000 diffs and they are 271MiB a
 ```
 ❯ zstd -19 -r /tmp/pchanges -o pchanges.zst
 ```
-zstd tell us that we will lose filenames and directory structure but this is just a way to guage a path forward, if we do this in code i think we can recover them somehow.
+zstd tell us that we will lose filenames and directory structure but this is just a way to gauge a path forward, if we do this in code i think we can recover them or label them externally somehow.
 
 ```
 #  Size on disk.
